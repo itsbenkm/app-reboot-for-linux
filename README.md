@@ -57,6 +57,12 @@ App-Reboot will launch your web browser (Chrome, Firefox, etc.), but restoring t
 - **Firefox:** Settings -> General -> "Open previous windows and tabs"
 - **Chrome:** Settings -> On startup -> "Continue where you left off"
 
+## Moving or Relocating the Folder
+
+The installer records **this folder's location** so the tool always knows where to save and restore your session. If you move or rename the folder later, the installed hooks (systemd + autostart) will still point at the old path.
+
+If you need to relocate it, just **re-run `./install.sh`** from the new location (or run `./uninstall.sh` *before* moving). The tool now detects a missing folder and tells you to do exactly this, instead of failing silently.
+
 ## Uninstallation
 
 **⚠️ IMPORTANT: Do not just delete the folder!** 

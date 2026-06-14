@@ -277,6 +277,16 @@ def main():
     # Use injected REPO_DIR so the save file stays within the cloned repository boundary
     REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
     
+    # Guard: the repo path was baked in at install time. If the folder was
+    # moved or deleted, there's nowhere to save the session state, so fail
+    # with a clear message instead of erroring obscurely later.
+    if not os.path.isdir(REPO_DIR):
+        sys.stderr.write(
+            f"app-reboot: project folder '{REPO_DIR}' no longer exists "
+            "(moved or deleted).\nRe-run install.sh from its new location.\n"
+        )
+        sys.exit(1)
+
     is_shutdown = "--shutdown" in sys.argv
     
     # Setup logging
