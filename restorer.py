@@ -49,6 +49,19 @@ def get_cpu_usage():
 
 def setup_logging(repo_dir):
     log_file = os.path.join(repo_dir, "monitor.log")
+    # Keep monitor.log bounded (shared with saver.py, which appends on every
+    # periodic run). Cap the file to the most recent MAX_LOG_LINES lines
+    # before appending this run's output.
+    MAX_LOG_LINES = 2000
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            if len(lines) > MAX_LOG_LINES:
+                with open(log_file, 'w', encoding='utf-8') as f:
+                    f.writelines(lines[-MAX_LOG_LINES:])
+    except Exception:
+        pass
     class Logger:
         def __init__(self, filename):
             self.terminal = sys.stdout

@@ -147,11 +147,13 @@ def get_gnome_terminal_sessions():
     return sessions
 
 def is_ignored(name):
-    """Checks if a detected application is in the hardcoded ignore list."""
-    for ignore in IGNORE_LIST:
-        if ignore in name:
-            return True
-    return False
+    """Checks if a detected application is in the hardcoded ignore list.
+
+    Uses exact membership rather than substring matching, so an ignored
+    identifier (e.g. 'python3' or 'gjs') can't accidentally suppress an
+    unrelated real application whose name merely contains that substring.
+    """
+    return name in IGNORE_LIST
 
 def get_running_gui_apps(app_map):
     """
@@ -241,6 +243,20 @@ def get_running_gui_apps(app_map):
 
 def setup_logging(repo_dir):
     log_file = os.path.join(repo_dir, "monitor.log")
+    # Keep monitor.log bounded: the periodic saver appends to it on every run
+    # (every couple of minutes), so without trimming it would grow without
+    # limit. Before appending this run's output, cap the file to the most
+    # recent MAX_LOG_LINES lines.
+    MAX_LOG_LINES = 2000
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            if len(lines) > MAX_LOG_LINES:
+                with open(log_file, 'w', encoding='utf-8') as f:
+                    f.writelines(lines[-MAX_LOG_LINES:])
+    except Exception:
+        pass
     class Logger:
         def __init__(self, filename):
             self.terminal = sys.stdout
