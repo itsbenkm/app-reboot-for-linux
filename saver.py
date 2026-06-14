@@ -91,8 +91,19 @@ def parse_desktop_files(files):
 def get_gnome_terminal_sessions():
     """
     Finds all bash/zsh shell processes running inside GNOME Terminal
-    and returns a list of their current working directories.
+    and returns a list of their current working directories and running commands.
     """
+    children_map = {}
+    for p in os.listdir('/proc'):
+        if p.isdigit():
+            try:
+                with open(f'/proc/{p}/stat', 'r') as f:
+                    stat_content = f.read()
+                    ppid = stat_content.split(')')[1].split()[1]
+                    children_map.setdefault(ppid, []).append(p)
+            except Exception:
+                pass
+
     sessions = []
     current_uid = os.getuid()
     for pid in os.listdir('/proc'):
@@ -114,7 +125,23 @@ def get_gnome_terminal_sessions():
                     
                 if pcomm.startswith('gnome-terminal-'):
                     cwd = os.readlink(os.path.join(proc_dir, 'cwd'))
-                    sessions.append(cwd)
+                    
+                    cmds = []
+                    for cpid in children_map.get(pid, []):
+                        try:
+                            with open(f'/proc/{cpid}/cmdline', 'rb') as f:
+                                cmd_bytes = f.read()
+                                if cmd_bytes:
+                                    cmd_str = ' '.join([b.decode('utf-8', errors='ignore') for b in cmd_bytes.split(b'\x00')]).strip()
+                                    if cmd_str and not cmd_str.startswith('gnome-terminal'):
+                                        cmds.append(cmd_str)
+                        except Exception:
+                            pass
+                            
+                    sessions.append({
+                        "cwd": cwd,
+                        "running_commands": cmds
+                    })
         except Exception:
             pass
     return sessions
@@ -262,7 +289,7 @@ def main():
     for app in apps_to_save:
         print(f" - {os.path.basename(app['path'])} ({(app['mem'] / 1024 / 1024):.1f} MB)")
     for term in terminal_sessions:
-        print(f" - Terminal at: {term}")
+        print(f" - Terminal at: {term.get('cwd') if isinstance(term, dict) else term}")
 
 if __name__ == "__main__":
     main()

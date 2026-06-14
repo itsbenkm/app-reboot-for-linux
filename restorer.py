@@ -119,15 +119,31 @@ def main():
         wait_retries += 1
 
     # Restore terminal sessions first
-    for term_cwd in terminal_sessions:
+    for term in terminal_sessions:
+        term_cwd = term.get('cwd') if isinstance(term, dict) else term
+        cmds = term.get('running_commands', []) if isinstance(term, dict) else []
+        
         if not os.path.isdir(term_cwd):
             continue
         print(f"Restoring Terminal at {term_cwd}...")
         try:
-            subprocess.Popen(['gnome-terminal', f'--working-directory={term_cwd}'],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+            if cmds:
+                # Build hint text
+                hint_lines = "\\n".join([f" - {cmd}" for cmd in cmds])
+                hint_msg = f"\\e[1;33m[App-Reboot Hint] Before shutdown, this terminal was running:\\n{hint_lines}\\e[0m"
+                
+                # Execute bash with a hint, then drop into interactive shell
+                bash_cmd = f"echo -e '{hint_msg}'; exec $SHELL"
+                
+                subprocess.Popen(['gnome-terminal', f'--working-directory={term_cwd}', '--', 'bash', '-c', bash_cmd],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            else:
+                subprocess.Popen(['gnome-terminal', f'--working-directory={term_cwd}'],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
             time.sleep(1.0)
         except Exception as e:
             print(f"Failed to launch terminal in {term_cwd}: {e}")
