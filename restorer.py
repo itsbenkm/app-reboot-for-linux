@@ -79,15 +79,28 @@ def main():
 
     try:
         with open(session_file, 'r', encoding='utf-8') as f:
-            apps = json.load(f)
+            data = json.load(f)
     except Exception as e:
         print(f"Error reading session file: {e}")
         return
 
+    apps = []
+    terminal_sessions = []
+    
+    if isinstance(data, dict):
+        apps = data.get("apps", [])
+        terminal_sessions = data.get("gnome_terminal_sessions", [])
+    elif isinstance(data, list):
+        apps = data
+
+    if terminal_sessions:
+        # Filter out the standard gnome-terminal desktop file to prevent duplicates
+        apps = [app for app in apps if 'org.gnome.Terminal.desktop' not in app.get('path', '')]
+
     # Sort apps by memory usage, ascending (lightest applications launch first)
     apps.sort(key=lambda x: x.get('mem', 0))
 
-    print(f"Found {len(apps)} applications to restore.")
+    print(f"Found {len(apps)} applications and {len(terminal_sessions)} terminal sessions to restore.")
     
     print("Waiting for system load to stabilize before restoring apps...")
     # Initial wait to let auto.updates or other heavy startup tasks begin
@@ -104,6 +117,23 @@ def main():
         print("System busy, waiting for it to settle...")
         time.sleep(2.0)
         wait_retries += 1
+
+    # Restore terminal sessions first
+    for term_cwd in terminal_sessions:
+        if not os.path.isdir(term_cwd):
+            continue
+        print(f"Restoring Terminal at {term_cwd}...")
+        try:
+            subprocess.Popen(['gnome-terminal', f'--working-directory={term_cwd}'],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            time.sleep(1.0)
+        except Exception as e:
+            print(f"Failed to launch terminal in {term_cwd}: {e}")
+            
+    if terminal_sessions:
+        time.sleep(3.0)
 
     for app in apps:
         app_path = app.get('path')

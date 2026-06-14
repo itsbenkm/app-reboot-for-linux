@@ -88,6 +88,37 @@ def parse_desktop_files(files):
             pass
     return app_map
 
+def get_gnome_terminal_sessions():
+    """
+    Finds all bash/zsh shell processes running inside GNOME Terminal
+    and returns a list of their current working directories.
+    """
+    sessions = []
+    current_uid = os.getuid()
+    for pid in os.listdir('/proc'):
+        if not pid.isdigit(): continue
+        try:
+            proc_dir = os.path.join('/proc', pid)
+            if os.stat(proc_dir).st_uid != current_uid: continue
+            
+            with open(os.path.join(proc_dir, 'comm'), 'r') as f:
+                comm = f.read().strip()
+                
+            if comm in ('bash', 'zsh', 'fish'):
+                with open(os.path.join(proc_dir, 'stat'), 'r') as f:
+                    stat_content = f.read()
+                    ppid = stat_content.split(')')[1].split()[1]
+                    
+                with open(os.path.join('/proc', ppid, 'comm'), 'r') as f:
+                    pcomm = f.read().strip()
+                    
+                if pcomm.startswith('gnome-terminal-'):
+                    cwd = os.readlink(os.path.join(proc_dir, 'cwd'))
+                    sessions.append(cwd)
+        except Exception:
+            pass
+    return sessions
+
 def is_ignored(name):
     """Checks if a detected application is in the hardcoded ignore list."""
     for ignore in IGNORE_LIST:
@@ -214,16 +245,24 @@ def main():
     
     # 2. Match them against running processes
     apps_to_save = get_running_gui_apps(app_map)
+    terminal_sessions = get_gnome_terminal_sessions()
 
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
+    session_data = {
+        "apps": apps_to_save,
+        "gnome_terminal_sessions": terminal_sessions
+    }
+    
     # Save session to file results to JSON
     with open(session_file, 'w', encoding='utf-8') as f:
-        json.dump(apps_to_save, f, indent=4)
+        json.dump(session_data, f, indent=4)
         
-    print(f"Saved {len(apps_to_save)} applications to {session_file}")
+    print(f"Saved {len(apps_to_save)} applications and {len(terminal_sessions)} terminal sessions to {session_file}")
     for app in apps_to_save:
         print(f" - {os.path.basename(app['path'])} ({(app['mem'] / 1024 / 1024):.1f} MB)")
+    for term in terminal_sessions:
+        print(f" - Terminal at: {term}")
 
 if __name__ == "__main__":
     main()
