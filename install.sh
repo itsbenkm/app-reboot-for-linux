@@ -39,7 +39,7 @@ Before=shutdown.target reboot.target halt.target
 [Service]
 Type=oneshot
 User=$USER_NAME
-ExecStart=$INSTALL_DIR/saver.py
+ExecStart=$INSTALL_DIR/saver.py --shutdown
 
 [Install]
 WantedBy=halt.target reboot.target shutdown.target

@@ -261,6 +261,8 @@ def main():
     # Use injected REPO_DIR so the save file stays within the cloned repository boundary
     REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
     
+    is_shutdown = "--shutdown" in sys.argv
+    
     # Setup logging
     setup_logging(REPO_DIR)
     
@@ -276,6 +278,25 @@ def main():
 
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
+    if is_shutdown:
+        print("Shutdown detected! Merging with previous state to prevent data loss from closing apps.")
+        try:
+            if os.path.exists(session_file):
+                with open(session_file, 'r', encoding='utf-8') as f:
+                    old_data = json.load(f)
+                
+                old_terms = old_data.get("gnome_terminal_sessions", [])
+                if not terminal_sessions and old_terms:
+                    terminal_sessions = old_terms
+                    print("Kept terminal sessions from previous save.")
+                    
+                old_apps = old_data.get("apps", [])
+                if len(apps_to_save) < len(old_apps):
+                    apps_to_save = old_apps
+                    print("Kept apps from previous save.")
+        except Exception as e:
+            print(f"Failed to merge state: {e}")
+            
     session_data = {
         "apps": apps_to_save,
         "gnome_terminal_sessions": terminal_sessions
