@@ -13,6 +13,8 @@ import os
 import json
 import time
 import subprocess
+import sys
+import datetime
 
 def get_cpu_usage():
     """
@@ -45,9 +47,30 @@ def get_cpu_usage():
     # CPU Usage = 100% - Idle%
     return 100.0 * (1.0 - idle_diff / total_diff)
 
+def setup_logging(repo_dir):
+    log_file = os.path.join(repo_dir, "monitor.log")
+    class Logger:
+        def __init__(self, filename):
+            self.terminal = sys.stdout
+            self.log = open(filename, 'a', encoding='utf-8')
+        def write(self, message):
+            self.terminal.write(message)
+            self.log.write(message)
+            self.log.flush()
+        def flush(self):
+            self.terminal.flush()
+            self.log.flush()
+    sys.stdout = Logger(log_file)
+    sys.stderr = sys.stdout
+    print(f"\n--- App-Reboot Restorer Run: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
+
 def main():
     # Use injected REPO_DIR so it reads from the cloned repository boundary
     REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
+    
+    # Setup logging
+    setup_logging(REPO_DIR)
+    
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
     if not os.path.exists(session_file):
@@ -95,11 +118,15 @@ def main():
             launch_success = False
             # Try 'gio launch' first (standard on GNOME/Ubuntu)
             if shutil.which('gio'):
-                result = subprocess.run(['gio', 'launch', app_path], 
-                                        stdout=subprocess.DEVNULL, 
-                                        stderr=subprocess.DEVNULL)
-                if result.returncode == 0:
-                    launch_success = True
+                try:
+                    result = subprocess.run(['gio', 'launch', app_path], 
+                                            stdout=subprocess.DEVNULL, 
+                                            stderr=subprocess.DEVNULL,
+                                            timeout=10)
+                    if result.returncode == 0:
+                        launch_success = True
+                except subprocess.TimeoutExpired:
+                    print(f"'gio launch' timed out for {app_path}, trying fallback.")
                     
             if not launch_success:
                 # Universal Fallback: parse Exec line from desktop file
@@ -122,9 +149,9 @@ def main():
         time.sleep(5.0)
         
         # Stability check: Wait until CPU usage drops below 40%
-        # We retry a maximum of 5 times (total ~10 extra seconds) to prevent infinite hanging
+        # We retry a maximum of 60 times (total ~120 extra seconds) to prevent infinite hanging
         retries = 0
-        max_retries = 5  
+        max_retries = 60  
         
         while retries < max_retries:
             cpu_usage = get_cpu_usage()

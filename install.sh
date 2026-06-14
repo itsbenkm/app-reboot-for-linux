@@ -97,6 +97,7 @@ Exec=$INSTALL_DIR/restorer.py
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
+Terminal=true
 EOF
 
 echo "Autostart configured for login."
