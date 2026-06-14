@@ -25,7 +25,7 @@ IGNORE_LIST = {
     'snap-handle-link', 'python3', 'python3.12', 'gnome-remote-desktop-daemon',
     'ibus-daemon', 'ibus-x11', 'gjs', 'gjs-console', 'systemd', 'dbus-daemon',
     'update-notifier', 'session-manager', 'at-spi-dbus-bus', 'x-terminal-emulator',
-    'SettingsDaemon'
+    'SettingsDaemon', 'org.gnome.Calendar', 'org.gnome.Software'
 }
 
 def get_desktop_files():

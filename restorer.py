@@ -92,12 +92,16 @@ def main():
             import shutil
             import shlex
             
+            launch_success = False
             # Try 'gio launch' first (standard on GNOME/Ubuntu)
             if shutil.which('gio'):
-                subprocess.Popen(['gio', 'launch', app_path], 
-                                 stdout=subprocess.DEVNULL, 
-                                 stderr=subprocess.DEVNULL)
-            else:
+                result = subprocess.run(['gio', 'launch', app_path], 
+                                        stdout=subprocess.DEVNULL, 
+                                        stderr=subprocess.DEVNULL)
+                if result.returncode == 0:
+                    launch_success = True
+                    
+            if not launch_success:
                 # Universal Fallback: parse Exec line from desktop file
                 with open(app_path, 'r', encoding='utf-8', errors='ignore') as dfile:
                     for line in dfile:
@@ -107,7 +111,8 @@ def main():
                             clean_exec = ' '.join([arg for arg in shlex.split(raw_exec) if not arg.startswith('%')])
                             subprocess.Popen(shlex.split(clean_exec),
                                              stdout=subprocess.DEVNULL, 
-                                             stderr=subprocess.DEVNULL)
+                                             stderr=subprocess.DEVNULL,
+                                             start_new_session=True)
                             break
         except Exception as e:
             print(f"Failed to launch {app_path}: {e}")

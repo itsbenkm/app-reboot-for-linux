@@ -67,3 +67,9 @@ To cleanly remove the tool, run the provided uninstaller:
 ./uninstall.sh
 ```
 This will safely remove the Autostart entries, systemd services, and background timers before deleting the application files.
+
+## Changelog
+
+**Latest Updates:**
+- **Improved Background Filtering:** Added `org.gnome.Calendar` and `org.gnome.Software` to the ignore list so their background daemon processes are no longer falsely restored as foreground windows.
+- **Robust App Launching:** Upgraded `gio launch` integration to verify successful D-Bus execution. It now includes an automatic fallback to directly launch applications via their `Exec` command in a detached session, preventing heavy applications (like Google Chrome) from silently timing out during high-load login sequences.
