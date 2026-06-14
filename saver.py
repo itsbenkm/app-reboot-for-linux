@@ -16,6 +16,8 @@ import glob
 import shlex
 import json
 import re
+import sys
+import datetime
 
 # Applications that shouldn't be restored even if they match a desktop file.
 # These are typically system daemons, tray icons, or background services.
@@ -179,7 +181,31 @@ def get_running_gui_apps(app_map):
             
     return list(running_apps.values())
 
+def setup_logging(repo_dir):
+    log_file = os.path.join(repo_dir, "monitor.log")
+    class Logger:
+        def __init__(self, filename):
+            self.terminal = sys.stdout
+            self.log = open(filename, 'a', encoding='utf-8')
+        def write(self, message):
+            self.terminal.write(message)
+            self.log.write(message)
+            self.log.flush()
+        def flush(self):
+            self.terminal.flush()
+            self.log.flush()
+    sys.stdout = Logger(log_file)
+    sys.stderr = sys.stdout
+    print(f"\n--- App-Reboot Saver Run: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
+
 def main():
+    # 3. Ensure the config directory exists
+    # Use injected REPO_DIR so the save file stays within the cloned repository boundary
+    REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
+    
+    # Setup logging
+    setup_logging(REPO_DIR)
+    
     print("Saving current GUI applications state...")
     
     # 1. Parse all available applications
@@ -188,10 +214,7 @@ def main():
     
     # 2. Match them against running processes
     apps_to_save = get_running_gui_apps(app_map)
-    
-    # 3. Ensure the config directory exists
-    # Use injected REPO_DIR so the save file stays within the cloned repository boundary
-    REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
+
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
     # Save session to file results to JSON
