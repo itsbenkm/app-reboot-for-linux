@@ -190,11 +190,11 @@ def main():
     apps_to_save = get_running_gui_apps(app_map)
     
     # 3. Ensure the config directory exists
-    config_dir = os.path.expanduser("~/.config/app-reboot")
-    os.makedirs(config_dir, exist_ok=True)
-    session_file = os.path.join(config_dir, "session.json")
+    # Use injected REPO_DIR so the save file stays within the cloned repository boundary
+    REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
+    session_file = os.path.join(REPO_DIR, "reboot.json")
     
-    # 4. Save the results to JSON
+    # Save session to file results to JSON
     with open(session_file, 'w', encoding='utf-8') as f:
         json.dump(apps_to_save, f, indent=4)
         

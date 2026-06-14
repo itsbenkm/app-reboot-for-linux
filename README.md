@@ -59,18 +59,11 @@ App-Reboot will launch your web browser (Chrome, Firefox, etc.), but restoring t
 
 ## Uninstallation
 
-If you wish to remove App-Reboot, run these commands:
+**⚠️ IMPORTANT: Do not just delete the folder!** 
+Because this tool integrates with GNOME startup and systemd, deleting the folder will leave "ghost" hooks running in the background.
+
+To cleanly remove the tool, run the provided uninstaller:
 ```bash
-# Disable and remove the systemd service
-sudo systemctl disable app-reboot-saver.service
-sudo rm /etc/systemd/system/app-reboot-saver.service
-sudo systemctl daemon-reload
-
-# Remove the Autostart entry
-rm ~/.config/autostart/app-reboot-restorer.desktop
-
-# Remove the installed scripts
-rm -rf ~/.local/bin/app-reboot
-rm ~/.local/bin/app-reboot-saver
-rm ~/.local/bin/app-reboot-restorer
+./uninstall.sh
 ```
+This will safely remove the Autostart entries, systemd services, and background timers before deleting the application files.

@@ -46,8 +46,9 @@ def get_cpu_usage():
     return 100.0 * (1.0 - idle_diff / total_diff)
 
 def main():
-    config_dir = os.path.expanduser("~/.config/app-reboot")
-    session_file = os.path.join(config_dir, "session.json")
+    # Use injected REPO_DIR so it reads from the cloned repository boundary
+    REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
+    session_file = os.path.join(REPO_DIR, "reboot.json")
     
     if not os.path.exists(session_file):
         print("No saved session found.")
@@ -65,6 +66,22 @@ def main():
 
     print(f"Found {len(apps)} applications to restore.")
     
+    print("Waiting for system load to stabilize before restoring apps...")
+    # Initial wait to let auto.updates or other heavy startup tasks begin
+    time.sleep(5.0)
+    
+    # Wait up to 2 minutes (60 retries * 2 sec) for the CPU to drop below 40%
+    wait_retries = 0
+    while wait_retries < 60:
+        cpu_usage = get_cpu_usage()
+        print(f"Current startup CPU usage: {cpu_usage:.1f}%")
+        if cpu_usage < 40.0:
+            print("System stable. Proceeding with restore.")
+            break
+        print("System busy, waiting for it to settle...")
+        time.sleep(2.0)
+        wait_retries += 1
+
     for app in apps:
         app_path = app.get('path')
         if not app_path or not os.path.exists(app_path):
@@ -97,7 +114,7 @@ def main():
             continue
 
         # Initial baseline wait to allow the app to begin loading
-        time.sleep(3.0)
+        time.sleep(5.0)
         
         # Stability check: Wait until CPU usage drops below 40%
         # We retry a maximum of 5 times (total ~10 extra seconds) to prevent infinite hanging
