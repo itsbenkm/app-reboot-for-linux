@@ -10,6 +10,7 @@ Unlike traditional startup scripts that launch everything at once (causing your 
 - **Staggered Launch**: Sorts applications by memory footprint and launches them sequentially to prevent "login storms".
 - **Smart Wait**: Actively monitors `/proc/stat` to ensure your CPU load has dropped below 40% before launching the next application.
 - **Background Filtering**: Automatically ignores background daemons (like `xdg-desktop-portal` or `gnome-shell`) so only user-facing apps are restored.
+- **Terminal Session Restore**: Reopens your `gnome-terminal` sessions as tabs in a single window, each back in its original working directory, with a note showing what was running and how to resume it (commands are never auto-run).
 
 ## Installation
 
@@ -24,12 +25,15 @@ Unlike traditional startup scripts that launch everything at once (causing your 
 ## How It Works
 
 ### The State Saver (`saver.py`)
-Triggered automatically by a `systemd` service (`app-reboot-saver.service`) when you shut down. 
-It analyzes `/proc/<pid>/cgroup` to reliably determine which `.desktop` applications are running under your user account, calculates their memory usage, and saves this list to `~/.config/app-reboot/session.json`.
+Triggered automatically two ways: by a `systemd` service (`app-reboot-saver.service`) when you shut down, and by a user timer (`app-reboot-saver.timer`) that re-saves every couple of minutes as a safety net — so your session is captured even if the shutdown hook runs after your apps have already begun closing.
+
+It analyzes `/proc/<pid>/cgroup` to reliably determine which `.desktop` applications are running under your user account and calculates their memory usage. It also records your open `gnome-terminal` sessions — each one's working directory and the command(s) running in it. Everything is saved to `reboot.json` **inside this project folder** (kept here so the tool stays self-contained).
 
 ### The Session Restorer (`restorer.py`)
 Triggered automatically by GNOME Autostart (`~/.config/autostart/app-reboot-restorer.desktop`) when you log in. 
-It reads the saved JSON state, sorts the applications by memory usage (ascending), and uses `gio launch` to cleanly start them one by one, waiting for the system CPU to settle between each launch.
+It reads the saved state from `reboot.json`, sorts the applications by memory usage (ascending), and uses `gio launch` to cleanly start them one by one, waiting for the system CPU to settle between each launch.
+
+Your saved `gnome-terminal` sessions are restored **first**, as **tabs in a single window** — the first session opens a new window and the rest are added as tabs. Each tab opens in its original working directory; if a command was running there, the tab prints a short note showing the directory, what was running, and a ready-to-paste line to resume it. Commands are **never auto-run** — restoring a terminal only reopens it and reminds you, so nothing unexpected executes on login.
 
 ## Usage & Commands
 
@@ -39,16 +43,16 @@ However, you can run these tools manually from any terminal if you want:
 
 - **Manually save the session right now:**
   ```bash
-  app-reboot-saver
+  ~/.local/bin/app-reboot/saver.py
   ```
 - **Manually trigger the restoration right now:**
   ```bash
-  app-reboot-restorer
+  ~/.local/bin/app-reboot/restorer.py
   ```
-- **View currently saved apps:**
-  To see exactly what the script has saved for your next boot, simply read the JSON file:
+- **View currently saved state:**
+  To see exactly what has been saved for your next boot (both apps and terminal sessions), read the JSON file in this project folder:
   ```bash
-  cat ~/.config/app-reboot/session.json
+  cat reboot.json
   ```
   *(Or open that file in any text editor).*
 
@@ -56,6 +60,20 @@ However, you can run these tools manually from any terminal if you want:
 App-Reboot will launch your web browser (Chrome, Firefox, etc.), but restoring the actual *tabs* depends on your browser settings. To ensure your tabs come back:
 - **Firefox:** Settings -> General -> "Open previous windows and tabs"
 - **Chrome:** Settings -> On startup -> "Continue where you left off"
+
+## Note on Terminal Sessions
+App-Reboot remembers your open `gnome-terminal` sessions. On login they come back as **tabs in one window**, each in the directory it was in. If something was running, the tab greets you with a note like:
+
+```
+[App-Reboot] This terminal was in: /home/you/projects/site
+It was running before shutdown (not auto-started):
+    npm run dev
+To resume, copy one of the lines above and run it.
+```
+
+The command is shown for you to re-run — it is **not** executed automatically. A couple of notes:
+- Only `gnome-terminal` is supported.
+- If you had terminals spread across several *windows*, they're consolidated into tabs of one window. The original window/tab grouping can't be recovered after a reboot (every shell shares one terminal-server process), so everything is gathered into a single window.
 
 ## Moving or Relocating the Folder
 
@@ -77,5 +95,6 @@ This will safely remove the Autostart entries, systemd services, and background 
 ## Changelog
 
 **Latest Updates:**
+- **Terminal Session Restore:** App-Reboot now remembers open `gnome-terminal` sessions and reopens them as tabs in a single window, each in its original directory, with a note showing what was running and a ready-to-paste line to resume it (commands are never auto-run).
 - **Improved Background Filtering:** Added `org.gnome.Calendar` and `org.gnome.Software` to the ignore list so their background daemon processes are no longer falsely restored as foreground windows.
 - **Robust App Launching:** Upgraded `gio launch` integration to verify successful D-Bus execution. It now includes an automatic fallback to directly launch applications via their `Exec` command in a detached session, preventing heavy applications (like Google Chrome) from silently timing out during high-load login sequences.
