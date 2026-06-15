@@ -141,35 +141,66 @@ def main():
         time.sleep(2.0)
         wait_retries += 1
 
-    # Restore terminal sessions first
+    # Restore terminal sessions first, gathered as TABS in a single window.
+    #
+    # gnome-terminal only runs a per-tab command for the FIRST tab in one
+    # invocation, so we launch the sessions sequentially: the first opens a
+    # new --window, and each subsequent one uses --tab, which "opens a new tab
+    # in the last-opened window" -- i.e. attaches to the window we just made.
+    # A short delay keeps them ordered and attached to the right window.
+    #
+    # NOTE: the original window/tab grouping can't be recovered from /proc
+    # (every shell shares one gnome-terminal-server parent), so all restored
+    # sessions come back as tabs of one window.
+    valid_terms = []
     for term in terminal_sessions:
         term_cwd = term.get('cwd') if isinstance(term, dict) else term
         cmds = term.get('running_commands', []) if isinstance(term, dict) else []
-        
-        if not os.path.isdir(term_cwd):
-            continue
-        print(f"Restoring Terminal at {term_cwd}...")
+        if term_cwd and os.path.isdir(term_cwd):
+            valid_terms.append((term_cwd, cmds))
+
+    def sh_quote_for_echo(text):
+        # Make text safe to embed inside a single-quoted bash string. The
+        # '\'' trick closes the quote, adds a literal quote, then reopens it,
+        # so the character also displays correctly in the echoed note.
+        return text.replace("'", "'\\''")
+
+    for idx, (term_cwd, cmds) in enumerate(valid_terms):
+        print(f"Restoring terminal tab at {term_cwd}...")
+        # First session opens the window; the rest attach to it as tabs.
+        tab_flag = '--window' if idx == 0 else '--tab'
         try:
             if cmds:
-                # Build hint text
-                hint_lines = "\\n".join([f" - {cmd}" for cmd in cmds])
-                hint_msg = f"\\e[1;33m[App-Reboot Hint] Before shutdown, this terminal was running:\\n{hint_lines}\\e[0m"
-                
-                # Execute bash with a hint, then drop into interactive shell
-                bash_cmd = f"echo -e '{hint_msg}'; exec $SHELL"
-                
-                subprocess.Popen(['gnome-terminal', f'--working-directory={term_cwd}', '--', 'bash', '-c', bash_cmd],
+                # Build an actionable note: where the terminal was, what it
+                # was running, and a ready-to-paste line to resume it. We do
+                # NOT auto-run the command -- that would be risky on login.
+                note_lines = [
+                    f"\\e[1;33m[App-Reboot] This terminal was in: {sh_quote_for_echo(term_cwd)}\\e[0m",
+                    "\\e[1;33mIt was running before shutdown (not auto-started):\\e[0m",
+                ]
+                for c in cmds:
+                    note_lines.append(f"\\e[0;36m    {sh_quote_for_echo(c)}\\e[0m")
+                note_lines.append("\\e[0;32mTo resume, copy one of the lines above and run it.\\e[0m")
+                note = "\\n".join(note_lines)
+
+                # Print the note, then hand over to an interactive shell.
+                bash_cmd = f"echo -e '{note}'; exec $SHELL"
+
+                subprocess.Popen(['gnome-terminal', tab_flag, f'--working-directory={term_cwd}',
+                                  '--', 'bash', '-c', bash_cmd],
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)
             else:
-                subprocess.Popen(['gnome-terminal', f'--working-directory={term_cwd}'],
+                subprocess.Popen(['gnome-terminal', tab_flag, f'--working-directory={term_cwd}'],
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,
                                  start_new_session=True)
+            # Brief pause so the next --tab attaches to the window we just
+            # opened (and to avoid hammering the terminal server).
             time.sleep(1.0)
         except Exception as e:
-            print(f"Failed to launch terminal in {term_cwd}: {e}")
+            print(f"Failed to launch terminal tab in {term_cwd}: {e}")
             
     if terminal_sessions:
         time.sleep(3.0)
