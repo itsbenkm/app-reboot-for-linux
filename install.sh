@@ -32,18 +32,22 @@ chmod +x "$INSTALL_DIR/restorer.py"
 
 echo "Scripts installed to $INSTALL_DIR"
 
-# 2. Setup Systemd Service for Shutdown (requires sudo)
+# 2. Setup Systemd Service for Shutdown (requires sudo).
+# This is the LATE backup pass: it runs at system shutdown, by which point the
+# user session is usually already gone. The `--late` flag makes it a no-op when
+# a usable save already exists (from the logout save in step 2.6 or the periodic
+# timer), so it can never clobber a good snapshot with an empty/partial one.
 SERVICE_FILE="/tmp/app-reboot-saver.service"
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
-Description=Save GUI Apps State Before Shutdown
+Description=Save GUI Apps State at shutdown (late backup pass)
 DefaultDependencies=no
 Before=shutdown.target reboot.target halt.target
 
 [Service]
 Type=oneshot
 User=$USER_NAME
-ExecStart=$INSTALL_DIR/saver.py --shutdown
+ExecStart=$INSTALL_DIR/saver.py --shutdown --late
 
 [Install]
 WantedBy=halt.target reboot.target shutdown.target
@@ -83,9 +87,33 @@ Type=oneshot
 ExecStart=$INSTALL_DIR/saver.py
 EOF
 
-echo "Enabling periodic safety net timer..."
+# 2.6 Setup the user logout/session-stop save (the PRIMARY, accurate capture).
+# Its ExecStop fires when the GNOME graphical session begins tearing down --
+# while your apps are still alive -- so it records the true session. It runs
+# entirely in user space (reads /proc, writes one JSON file) and TimeoutStopSec
+# guarantees it can never delay logout/shutdown beyond a few seconds.
+LOGOUT_SERVICE_FILE="$USER_SYSTEMD_DIR/app-reboot-saver-logout.service"
+cat <<EOF > "$LOGOUT_SERVICE_FILE"
+[Unit]
+Description=Save GUI Apps State on logout (while apps are still alive)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=$INSTALL_DIR/saver.py --shutdown
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+echo "Enabling periodic safety-net timer and logout save..."
 systemctl --user daemon-reload
 systemctl --user enable --now app-reboot-saver.timer
+systemctl --user enable --now app-reboot-saver-logout.service
 
 # 3. Setup Autostart for Login
 AUTOSTART_DIR="$USER_HOME/.config/autostart"

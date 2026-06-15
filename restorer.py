@@ -140,6 +140,10 @@ def main():
         print("System busy, waiting for it to settle...")
         time.sleep(2.0)
         wait_retries += 1
+    else:
+        # Loop exhausted without the CPU settling -- proceed regardless so a
+        # persistently busy login can't block the restore indefinitely.
+        print("CPU did not settle below 40% within the wait budget; proceeding anyway.")
 
     # Restore terminal sessions first, gathered as TABS in a single window.
     #
@@ -264,7 +268,11 @@ def main():
             print("System busy, waiting for it to settle...")
             time.sleep(2.0)
             retries += 1
-            
+        else:
+            # Loop exhausted without settling -- launch the next app anyway
+            # rather than stalling the whole restore on one busy moment.
+            print("CPU did not settle below 40% within the wait budget; launching next app anyway.")
+
     print("All applications restored!")
 
 if __name__ == "__main__":

@@ -8,11 +8,14 @@ echo "Uninstalling app-reboot..."
 # 1. Remove Autostart
 rm -f "$USER_HOME/.config/autostart/app-reboot-restorer.desktop"
 
-# 2. Remove User Systemd Timer/Service
+# 2. Remove User Systemd Timer/Service + logout save
 systemctl --user stop app-reboot-saver.timer 2>/dev/null
 systemctl --user disable app-reboot-saver.timer 2>/dev/null
+systemctl --user stop app-reboot-saver-logout.service 2>/dev/null
+systemctl --user disable app-reboot-saver-logout.service 2>/dev/null
 rm -f "$USER_HOME/.config/systemd/user/app-reboot-saver.timer"
 rm -f "$USER_HOME/.config/systemd/user/app-reboot-saver-periodic.service"
+rm -f "$USER_HOME/.config/systemd/user/app-reboot-saver-logout.service"
 systemctl --user daemon-reload
 
 # 3. Remove System-wide Shutdown Service (Requires sudo)

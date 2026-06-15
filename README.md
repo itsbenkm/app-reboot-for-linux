@@ -25,7 +25,10 @@ Unlike traditional startup scripts that launch everything at once (causing your 
 ## How It Works
 
 ### The State Saver (`saver.py`)
-Triggered automatically two ways: by a `systemd` service (`app-reboot-saver.service`) when you shut down, and by a user timer (`app-reboot-saver.timer`) that re-saves every couple of minutes as a safety net — so your session is captured even if the shutdown hook runs after your apps have already begun closing.
+Triggered automatically three ways, in order of accuracy:
+- **On logout** — a user service (`app-reboot-saver-logout.service`) whose `ExecStop` fires as your GNOME session begins shutting down, **while your apps are still alive**. This is the primary, most accurate capture. A short `TimeoutStopSec` guarantees it can never delay logout/shutdown.
+- **Every couple of minutes** — a user timer (`app-reboot-saver.timer`) re-saves as a safety net.
+- **At system shutdown** — a `systemd` service (`app-reboot-saver.service`) as a last-resort backup. It runs *late* (apps usually already gone), so it only fills in when no usable save exists and never clobbers a fresher one.
 
 It analyzes `/proc/<pid>/cgroup` to reliably determine which `.desktop` applications are running under your user account and calculates their memory usage. It also records your open `gnome-terminal` sessions — each one's working directory and the command(s) running in it. Everything is saved to `reboot.json` **inside this project folder** (kept here so the tool stays self-contained).
 
@@ -95,6 +98,7 @@ This will safely remove the Autostart entries, systemd services, and background 
 ## Changelog
 
 **Latest Updates:**
+- **Reliable logout capture:** Added a user logout service that saves your session *while your apps are still alive* (its `ExecStop` fires as the GNOME session tears down), making capture far more accurate than the late shutdown hook. It's time-bounded so it can never delay logout. The shutdown service is now a late backup that won't overwrite a good save, and the merge logic is identity-aware so apps you deliberately closed are no longer resurrected.
 - **Terminal Session Restore:** App-Reboot now remembers open `gnome-terminal` sessions and reopens them as tabs in a single window, each in its original directory, with a note showing what was running and a ready-to-paste line to resume it (commands are never auto-run).
 - **Improved Background Filtering:** Added `org.gnome.Calendar` and `org.gnome.Software` to the ignore list so their background daemon processes are no longer falsely restored as foreground windows.
 - **Robust App Launching:** Upgraded `gio launch` integration to verify successful D-Bus execution. It now includes an automatic fallback to directly launch applications via their `Exec` command in a detached session, preventing heavy applications (like Google Chrome) from silently timing out during high-load login sequences.

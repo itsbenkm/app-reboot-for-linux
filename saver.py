@@ -292,7 +292,11 @@ def main():
         sys.exit(1)
 
     is_shutdown = "--shutdown" in sys.argv
-    
+    # --late marks the system shutdown service's pass, which runs after the
+    # session is torn down. It only fills in when no usable save exists, so it
+    # can't clobber the authoritative early (logout) save.
+    is_late = "--late" in sys.argv
+
     # Setup logging
     setup_logging(REPO_DIR)
     
@@ -309,23 +313,43 @@ def main():
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
     if is_shutdown:
-        print("Shutdown detected! Merging with previous state to prevent data loss from closing apps.")
+        # Two passes run at shutdown:
+        #   * EARLY (user logout service, `--shutdown`): apps are still alive,
+        #     so this scan is authoritative -- trust it. Only fall back to the
+        #     previous save if THIS scan came back empty (session already torn
+        #     down). A non-empty scan reflects reality, including apps you
+        #     deliberately closed -- so we must NOT resurrect them (this is the
+        #     identity-aware replacement for the old count-based heuristic).
+        #   * LATE (system shutdown service, `--shutdown --late`): runs after
+        #     the session is gone, when a scan is unreliable. It must never
+        #     clobber a good save, so it only writes when none already exists.
+        print("Shutdown save: reconciling with any previous state...")
         try:
+            old_data = {}
             if os.path.exists(session_file):
                 with open(session_file, 'r', encoding='utf-8') as f:
                     old_data = json.load(f)
-                
-                old_terms = old_data.get("gnome_terminal_sessions", [])
+            old_apps = old_data.get("apps", [])
+            old_terms = old_data.get("gnome_terminal_sessions", [])
+
+            if is_late:
+                # Backup pass: if a usable save already exists (from the early
+                # logout pass or the periodic timer), leave it untouched.
+                if old_apps or old_terms:
+                    print("Late backup pass: a usable save already exists; leaving it untouched.")
+                    return
+                print("Late backup pass: no prior save found; capturing best-effort state.")
+            else:
+                # Authoritative pass: keep the live scan; only restore from the
+                # previous save if this scan came back empty (ran too late).
+                if not apps_to_save and old_apps:
+                    apps_to_save = old_apps
+                    print("Current scan found no apps; kept apps from the previous save.")
                 if not terminal_sessions and old_terms:
                     terminal_sessions = old_terms
-                    print("Kept terminal sessions from previous save.")
-                    
-                old_apps = old_data.get("apps", [])
-                if len(apps_to_save) < len(old_apps):
-                    apps_to_save = old_apps
-                    print("Kept apps from previous save.")
+                    print("Current scan found no terminals; kept terminals from the previous save.")
         except Exception as e:
-            print(f"Failed to merge state: {e}")
+            print(f"Failed to reconcile with previous state: {e}")
             
     session_data = {
         "apps": apps_to_save,
