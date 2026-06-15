@@ -26,7 +26,7 @@ Unlike traditional startup scripts that launch everything at once (causing your 
 
 ### The State Saver (`saver.py`)
 Triggered automatically three ways, in order of accuracy:
-- **On logout** — a user service (`app-reboot-saver-logout.service`) whose `ExecStop` fires as your GNOME session begins shutting down, **while your apps are still alive**. This is the primary, most accurate capture. A short `TimeoutStopSec` guarantees it can never delay logout/shutdown.
+- **On logout/shutdown** — a user service (`app-reboot-saver-logout.service`) whose `ExecStop` runs **while your apps are still alive**, as your GNOME session tears down. This is the most accurate capture and the primary mechanism on a normal logout, restart, or shutdown. A short `TimeoutStopSec` guarantees it can never delay the process. (On an abrupt power-cut it may not get to run — that's what the periodic timer below covers.)
 - **Every couple of minutes** — a user timer (`app-reboot-saver.timer`) re-saves as a safety net.
 - **At system shutdown** — a `systemd` service (`app-reboot-saver.service`) as a last-resort backup. It runs *late* (apps usually already gone), so it only fills in when no usable save exists and never clobbers a fresher one.
 

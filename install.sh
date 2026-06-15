@@ -22,10 +22,13 @@ mkdir -p "$INSTALL_DIR"
 rm -f "$INSTALL_DIR/saver.py" "$INSTALL_DIR/restorer.py"
 cp saver.py restorer.py "$INSTALL_DIR/"
 
-# Inject the current repository path so the save file stays contained here
+# Inject the current repository path so the save file stays contained here.
+# Escape sed metacharacters (&, |, \) so paths containing them don't corrupt
+# the substitution.
 REPO_DIR="$PWD"
-sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR|g" "$INSTALL_DIR/saver.py"
-sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR|g" "$INSTALL_DIR/restorer.py"
+REPO_DIR_ESC=$(printf '%s' "$REPO_DIR" | sed -e 's/[&\\|]/\\&/g')
+sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR_ESC|g" "$INSTALL_DIR/saver.py"
+sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR_ESC|g" "$INSTALL_DIR/restorer.py"
 
 chmod +x "$INSTALL_DIR/saver.py"
 chmod +x "$INSTALL_DIR/restorer.py"
