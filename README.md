@@ -11,6 +11,7 @@ Unlike traditional startup scripts that launch everything at once (causing your 
 - **Smart Wait**: Actively monitors `/proc/stat` to ensure your CPU load has dropped below 40% before launching the next application.
 - **Background Filtering**: Automatically ignores background daemons (like `xdg-desktop-portal` or `gnome-shell`) so only user-facing apps are restored.
 - **Terminal Session Restore**: Reopens your `gnome-terminal` sessions as tabs in a single window, each back in its original working directory, with a note showing what was running and how to resume it (commands are never auto-run).
+- **Trusted-Path Launch**: Only restores `.desktop` files that resolve to a known system applications directory, so a tampered `reboot.json` can't make an arbitrary `Exec` line run on login.
 
 ## Installation
 
@@ -98,6 +99,7 @@ This will safely remove the Autostart entries, systemd services, and background 
 ## Changelog
 
 **Latest Updates:**
+- **Hardened restore against tampered `reboot.json`:** Before launching, the restorer now validates that each app's `.desktop` path resolves (via `os.path.realpath`, defeating symlink and `..` tricks) to a location under one of the known/trusted applications directories — the same set the saver scans. Since `reboot.json` lives in a world-readable, user-writable folder, this stops a tampered `path` from pointing at an arbitrary `.desktop` file whose `Exec` line would otherwise run on login. Untrusted entries are skipped with a clear warning.
 - **Reliable logout capture:** Added a user logout service that saves your session *while your apps are still alive* (its `ExecStop` fires as the GNOME session tears down), making capture far more accurate than the late shutdown hook. It's time-bounded so it can never delay logout. The shutdown service is now a late backup that won't overwrite a good save, and the merge logic is identity-aware so apps you deliberately closed are no longer resurrected.
 - **Terminal Session Restore:** App-Reboot now remembers open `gnome-terminal` sessions and reopens them as tabs in a single window, each in its original directory, with a note showing what was running and a ready-to-paste line to resume it (commands are never auto-run).
 - **Improved Background Filtering:** Added `org.gnome.Calendar` and `org.gnome.Software` to the ignore list so their background daemon processes are no longer falsely restored as foreground windows.

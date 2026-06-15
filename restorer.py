@@ -16,6 +16,34 @@ import subprocess
 import sys
 import datetime
 
+# Trusted directories that .desktop files may legitimately live in. These are
+# exactly the locations saver.py scans in get_desktop_files(). A launchable
+# app's path in reboot.json must resolve to a location under one of these; any
+# other path is treated as tampering and skipped (reboot.json is user-writable
+# in a world-readable folder, so an attacker could otherwise point `path` at an
+# arbitrary .desktop file whose Exec line would run on login).
+TRUSTED_DESKTOP_DIRS = [
+    os.path.realpath(d) for d in (
+        "/usr/share/applications",
+        os.path.expanduser("~/.local/share/applications"),
+        "/var/lib/snapd/desktop/applications",
+        "/var/lib/flatpak/exports/share/applications",
+        os.path.expanduser("~/.local/share/flatpak/exports/share/applications"),
+    )
+]
+
+def is_trusted_desktop(path):
+    """
+    Returns True only if `path` resolves to a location strictly under one of
+    the known/trusted desktop-file directories. Both sides are passed through
+    os.path.realpath so symlinks and '..' tricks can't escape a trusted dir.
+    """
+    real_path = os.path.realpath(path)
+    for trusted in TRUSTED_DESKTOP_DIRS:
+        if real_path.startswith(trusted + os.sep):
+            return True
+    return False
+
 def get_cpu_usage():
     """
     Calculates the current CPU usage percentage by reading /proc/stat.
@@ -213,7 +241,14 @@ def main():
         app_path = app.get('path')
         if not app_path or not os.path.exists(app_path):
             continue
-            
+
+        # Security: reboot.json is user-writable, so only launch desktop files
+        # that resolve to a known/trusted applications directory. Otherwise a
+        # tampered path could run an arbitrary Exec line on login.
+        if not is_trusted_desktop(app_path):
+            print(f"Skipping untrusted desktop file: {app_path}")
+            continue
+
         print(f"Launching {os.path.basename(app_path)}...")
         try:
             import shutil
