@@ -99,7 +99,9 @@ def get_gnome_terminal_sessions():
             try:
                 with open(f'/proc/{p}/stat', 'r') as f:
                     stat_content = f.read()
-                    ppid = stat_content.split(')')[1].split()[1]
+                    # rsplit on the last ')' so process names containing ')'
+                    # (e.g. "foo)bar" in comm) don't shift the field offsets.
+                    ppid = stat_content.rsplit(')', 1)[1].split()[1]
                     children_map.setdefault(ppid, []).append(p)
             except Exception:
                 pass
@@ -118,7 +120,9 @@ def get_gnome_terminal_sessions():
             if comm in ('bash', 'zsh', 'fish'):
                 with open(os.path.join(proc_dir, 'stat'), 'r') as f:
                     stat_content = f.read()
-                    ppid = stat_content.split(')')[1].split()[1]
+                    # rsplit on the last ')' so process names containing ')'
+                    # (e.g. "foo)bar" in comm) don't shift the field offsets.
+                    ppid = stat_content.rsplit(')', 1)[1].split()[1]
                     
                 with open(os.path.join('/proc', ppid, 'comm'), 'r') as f:
                     pcomm = f.read().strip()

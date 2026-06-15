@@ -1,2 +1,4 @@
 reboot.json
 monitor.log
+__pycache__/
+*.pyc

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Run from the script's own directory so relative copies and the baked-in
+# project path are correct even if the installer is invoked from elsewhere.
+cd "$(dirname "$(readlink -f "$0")")"
+
 # Get current user and home directory
 USER_NAME=$USER
 USER_HOME=$HOME
