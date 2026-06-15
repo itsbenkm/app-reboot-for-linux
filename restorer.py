@@ -15,6 +15,8 @@ import time
 import subprocess
 import sys
 import datetime
+import shutil
+import shlex
 
 # Trusted directories that .desktop files may legitimately live in. These are
 # exactly the locations saver.py scans in get_desktop_files(). A launchable
@@ -251,9 +253,6 @@ def main():
 
         print(f"Launching {os.path.basename(app_path)}...")
         try:
-            import shutil
-            import shlex
-            
             launch_success = False
             # Try 'gio launch' first (standard on GNOME/Ubuntu)
             if shutil.which('gio'):

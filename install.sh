@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+# This installer must run as your normal user -- it calls sudo itself only for
+# the system shutdown service. Running the whole thing as root would bake
+# root's $HOME/$USER into the user-level units.
+if [ "$(id -u)" -eq 0 ]; then
+    echo "Please run install.sh as your normal user, not with sudo/root." >&2
+    exit 1
+fi
 
 # Run from the script's own directory so relative copies and the baked-in
 # project path are correct even if the installer is invoked from elsewhere.
