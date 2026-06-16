@@ -276,6 +276,21 @@ def setup_logging(repo_dir):
     sys.stderr = sys.stdout
     print(f"\n--- App-Reboot Saver Run: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
 
+def restore_in_progress():
+    """
+    True if the restorer is currently running (it holds a PID lock in /run while
+    bringing apps back). The periodic saver checks this so it doesn't overwrite
+    the saved session with a half-restored, partial scan mid-login. A stale lock
+    is ignored because we verify the recorded PID is still alive.
+    """
+    try:
+        lock = f"/run/user/{os.getuid()}/app-reboot.restoring"
+        with open(lock) as f:
+            pid = int(f.read().strip())
+        return os.path.exists(f"/proc/{pid}")
+    except Exception:
+        return False
+
 def main():
     # 3. Ensure the config directory exists
     # Use injected REPO_DIR so the save file stays within the cloned repository boundary
@@ -299,7 +314,15 @@ def main():
 
     # Setup logging
     setup_logging(REPO_DIR)
-    
+
+    # Don't let a periodic save run while the restorer is still bringing apps
+    # back: a mid-restore scan captures only a partial set and would overwrite
+    # the full saved session. Shutdown saves (--shutdown/--late) are exempt --
+    # they union/guard and run when no restore is active.
+    if not is_shutdown and restore_in_progress():
+        print("Restore in progress; skipping this periodic save (avoids capturing a partial session).")
+        return
+
     print("Saving current GUI applications state...")
     
     # 1. Parse all available applications

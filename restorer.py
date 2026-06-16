@@ -177,6 +177,17 @@ def main():
 
     print(f"Found {len(apps)} applications and {len(terminal_sessions)} terminal sessions to restore.")
     
+    # Hold a "restore in progress" lock so the periodic saver doesn't overwrite
+    # the saved session with a half-restored (partial) scan while we work. It
+    # lives in /run (tmpfs, cleared at reboot); the saver also checks the PID is
+    # alive, so a crashed restore can't leave a stale lock that blocks saves.
+    restore_lock = f"/run/user/{os.getuid()}/app-reboot.restoring"
+    try:
+        with open(restore_lock, "w") as f:
+            f.write(str(os.getpid()))
+    except Exception:
+        pass
+
     print("Waiting for system load to stabilize before restoring apps...")
     # Initial wait to let auto.updates or other heavy startup tasks begin
     time.sleep(5.0)
@@ -330,6 +341,12 @@ def main():
             print(f"CPU did not settle below {cpu_threshold:.0f}% within the wait budget; launching next app anyway.")
 
     print("All applications restored!")
+
+    # Release the restore-in-progress lock so periodic saves resume.
+    try:
+        os.remove(restore_lock)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()
