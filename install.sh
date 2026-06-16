@@ -81,8 +81,9 @@ cat <<EOF > "$TIMER_FILE"
 Description=App-Reboot Periodic Save Timer
 
 [Timer]
-# Starts 2 minutes after boot, and runs every 2 minutes while awake.
-OnBootSec=2m
+# First save 5 minutes after boot (giving the restore time to finish so the
+# periodic save can't race it), then every 2 minutes while awake.
+OnBootSec=5m
 OnUnitActiveSec=2m
 Unit=app-reboot-saver-periodic.service
 

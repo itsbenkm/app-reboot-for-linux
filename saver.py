@@ -368,11 +368,27 @@ def main():
         except Exception as e:
             print(f"Failed to reconcile with previous state: {e}")
             
+    # Safety: never overwrite a non-empty saved session with an empty scan.
+    # A scan that finds nothing almost always means we ran at a bad moment --
+    # e.g. the periodic timer firing ~2 minutes into boot, before the restore
+    # has opened anything. Writing it would WIPE the save and leave nothing to
+    # restore. Keep the previous save instead. (A genuine "I closed everything"
+    # case just means last session's apps reopen once -- far better than a wipe.)
+    if not apps_to_save and not terminal_sessions and os.path.exists(session_file):
+        try:
+            with open(session_file, 'r', encoding='utf-8') as f:
+                prev = json.load(f)
+            if prev.get("apps") or prev.get("gnome_terminal_sessions"):
+                print("Scan found nothing running; keeping the previous non-empty save (not overwriting).")
+                return
+        except Exception:
+            pass
+
     session_data = {
         "apps": apps_to_save,
         "gnome_terminal_sessions": terminal_sessions
     }
-    
+
     # Save session to file results to JSON
     with open(session_file, 'w', encoding='utf-8') as f:
         json.dump(session_data, f, indent=4)
