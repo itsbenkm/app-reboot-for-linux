@@ -28,8 +28,8 @@ fi
 
 # 1. Create installation directory and copy scripts
 mkdir -p "$INSTALL_DIR"
-rm -f "$INSTALL_DIR/saver.py" "$INSTALL_DIR/restorer.py"
-cp saver.py restorer.py "$INSTALL_DIR/"
+rm -f "$INSTALL_DIR/saver.py" "$INSTALL_DIR/restorer.py" "$INSTALL_DIR/aliases.sh"
+cp saver.py restorer.py aliases.sh "$INSTALL_DIR/"
 
 # Inject the current repository path so the save file stays contained here.
 # Escape sed metacharacters (&, |, \) so paths containing them don't corrupt
@@ -38,6 +38,7 @@ REPO_DIR="$PWD"
 REPO_DIR_ESC=$(printf '%s' "$REPO_DIR" | sed -e 's/[&\\|]/\\&/g')
 sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR_ESC|g" "$INSTALL_DIR/saver.py"
 sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR_ESC|g" "$INSTALL_DIR/restorer.py"
+sed -i "s|<REPO_DIR_PLACEHOLDER>|$REPO_DIR_ESC|g" "$INSTALL_DIR/aliases.sh"
 
 chmod +x "$INSTALL_DIR/saver.py"
 chmod +x "$INSTALL_DIR/restorer.py"
@@ -145,6 +146,15 @@ Terminal=false
 EOF
 
 echo "Autostart configured for login."
+
+# 4. Make the 'app-reboot-cpu-limit' command available in new shells, by
+# sourcing aliases.sh from ~/.bashrc (idempotent -- added at most once).
+BASHRC="$USER_HOME/.bashrc"
+if ! grep -q "source ~/.local/bin/app-reboot/aliases.sh" "$BASHRC" 2>/dev/null; then
+    echo '[ -f ~/.local/bin/app-reboot/aliases.sh ] && source ~/.local/bin/app-reboot/aliases.sh' >> "$BASHRC"
+    echo "Added the 'app-reboot-cpu-limit' command to $BASHRC (open a new terminal to use it)."
+fi
+
 echo ""
 echo "Installation complete!"
 echo "Your open applications will now be saved when you shut down, and restored one-by-one when you log in."

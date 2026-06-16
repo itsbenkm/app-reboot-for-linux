@@ -107,6 +107,24 @@ def setup_logging(repo_dir):
     sys.stderr = sys.stdout
     print(f"\n--- App-Reboot Restorer Run: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
 
+def read_cpu_threshold(repo_dir, default=60.0):
+    """
+    Read the CPU-settle threshold (percent) from the optional `config` file in
+    the project folder -- set via the `app-reboot-cpu-limit` command. Returns
+    `default` if the file is missing or the value is outside the sane 10-100
+    range, so a bad/edited value can never wedge the restore.
+    """
+    try:
+        with open(os.path.join(repo_dir, "config"), "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("CPU_THRESHOLD="):
+                    val = float(line.split("=", 1)[1].strip())
+                    if 10.0 <= val <= 100.0:
+                        return val
+    except Exception:
+        pass
+    return default
+
 def main():
     # Use injected REPO_DIR so it reads from the cloned repository boundary
     REPO_DIR = "<REPO_DIR_PLACEHOLDER>"
@@ -123,7 +141,11 @@ def main():
 
     # Setup logging
     setup_logging(REPO_DIR)
-    
+
+    # CPU-settle threshold (percent), configurable via `app-reboot-cpu-limit`.
+    cpu_threshold = read_cpu_threshold(REPO_DIR)
+    print(f"Using CPU-settle threshold: {cpu_threshold:.0f}%")
+
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
     if not os.path.exists(session_file):
@@ -164,7 +186,7 @@ def main():
     while wait_retries < 60:
         cpu_usage = get_cpu_usage()
         print(f"Current startup CPU usage: {cpu_usage:.1f}%")
-        if cpu_usage < 60.0:
+        if cpu_usage < cpu_threshold:
             print("System stable. Proceeding with restore.")
             break
         print("System busy, waiting for it to settle...")
@@ -173,7 +195,7 @@ def main():
     else:
         # Loop exhausted without the CPU settling -- proceed regardless so a
         # persistently busy login can't block the restore indefinitely.
-        print("CPU did not settle below 60% within the wait budget; proceeding anyway.")
+        print(f"CPU did not settle below {cpu_threshold:.0f}% within the wait budget; proceeding anyway.")
 
     # Restore terminal sessions first, gathered as TABS in a single window.
     #
@@ -295,7 +317,7 @@ def main():
             cpu_usage = get_cpu_usage()
             print(f"Current CPU usage: {cpu_usage:.1f}%")
             
-            if cpu_usage < 60.0:  # Threshold for "stable"
+            if cpu_usage < cpu_threshold:  # Threshold for "stable"
                 print("System stable. Proceeding to next app.")
                 break
                 
@@ -305,7 +327,7 @@ def main():
         else:
             # Loop exhausted without settling -- launch the next app anyway
             # rather than stalling the whole restore on one busy moment.
-            print("CPU did not settle below 60% within the wait budget; launching next app anyway.")
+            print(f"CPU did not settle below {cpu_threshold:.0f}% within the wait budget; launching next app anyway.")
 
     print("All applications restored!")
 

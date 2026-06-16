@@ -30,4 +30,13 @@ fi
 # 4. Remove binaries
 rm -rf "$INSTALL_DIR"
 
+# 5. Strip the aliases source line from ~/.bashrc (added by install.sh)
+BASHRC="$USER_HOME/.bashrc"
+if [ -f "$BASHRC" ] && grep -q "source ~/.local/bin/app-reboot/aliases.sh" "$BASHRC"; then
+    tmp=$(mktemp -p "$(dirname "$BASHRC")")
+    grep -v "source ~/.local/bin/app-reboot/aliases.sh" "$BASHRC" > "$tmp"
+    mv "$tmp" "$BASHRC"
+    echo "Removed the app-reboot aliases line from ~/.bashrc (open a new terminal to refresh)."
+fi
+
 echo "Uninstallation complete."
