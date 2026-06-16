@@ -159,12 +159,12 @@ def main():
     # Initial wait to let auto.updates or other heavy startup tasks begin
     time.sleep(5.0)
     
-    # Wait up to 2 minutes (60 retries * 2 sec) for the CPU to drop below 40%
+    # Wait up to 2 minutes (60 retries * 2 sec) for the CPU to drop below 60%
     wait_retries = 0
     while wait_retries < 60:
         cpu_usage = get_cpu_usage()
         print(f"Current startup CPU usage: {cpu_usage:.1f}%")
-        if cpu_usage < 40.0:
+        if cpu_usage < 60.0:
             print("System stable. Proceeding with restore.")
             break
         print("System busy, waiting for it to settle...")
@@ -173,7 +173,7 @@ def main():
     else:
         # Loop exhausted without the CPU settling -- proceed regardless so a
         # persistently busy login can't block the restore indefinitely.
-        print("CPU did not settle below 40% within the wait budget; proceeding anyway.")
+        print("CPU did not settle below 60% within the wait budget; proceeding anyway.")
 
     # Restore terminal sessions first, gathered as TABS in a single window.
     #
@@ -286,7 +286,7 @@ def main():
         # Initial baseline wait to allow the app to begin loading
         time.sleep(5.0)
         
-        # Stability check: Wait until CPU usage drops below 40%
+        # Stability check: Wait until CPU usage drops below 60%
         # We retry a maximum of 60 times (total ~120 extra seconds) to prevent infinite hanging
         retries = 0
         max_retries = 60  
@@ -295,7 +295,7 @@ def main():
             cpu_usage = get_cpu_usage()
             print(f"Current CPU usage: {cpu_usage:.1f}%")
             
-            if cpu_usage < 40.0:  # Threshold for "stable"
+            if cpu_usage < 60.0:  # Threshold for "stable"
                 print("System stable. Proceeding to next app.")
                 break
                 
@@ -305,7 +305,7 @@ def main():
         else:
             # Loop exhausted without settling -- launch the next app anyway
             # rather than stalling the whole restore on one busy moment.
-            print("CPU did not settle below 40% within the wait budget; launching next app anyway.")
+            print("CPU did not settle below 60% within the wait budget; launching next app anyway.")
 
     print("All applications restored!")
 

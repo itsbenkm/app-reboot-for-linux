@@ -233,15 +233,11 @@ def get_running_gui_apps(app_map):
                     rss_pages = int(f.read().split()[1])
                     mem = rss_pages * page_size
 
-                # Aggregate memory and record the PIDs that make up this app, so
-                # a later shutdown pass can tell an app that's still quitting
-                # (some PID still alive) from one you actually closed (all PIDs
-                # gone). The PIDs are session-scoped; the restorer ignores them.
+                # Aggregate memory if multiple processes share the same desktop file
                 if desktop_file not in running_apps:
-                    running_apps[desktop_file] = {'mem': mem, 'path': desktop_file, 'pids': [int(pid)]}
+                    running_apps[desktop_file] = {'mem': mem, 'path': desktop_file}
                 else:
                     running_apps[desktop_file]['mem'] += mem
-                    running_apps[desktop_file]['pids'].append(int(pid))
 
         except (OSError, IOError, ValueError):
             # Ignore processes that die while we are inspecting them
@@ -344,27 +340,28 @@ def main():
                     return
                 print("Late backup pass: no prior save found; capturing best-effort state.")
             else:
-                # Authoritative pass. A scan taken as the session tears down can
-                # MISS an app that's still quitting -- e.g. a browser whose
-                # helper processes have exited, leaving only a main process this
-                # heuristic can't name-match. So for any app in the previous
-                # (periodic) save that this scan didn't see, keep it ONLY if one
-                # of its recorded PIDs is still alive: still-alive means it's
-                # still quitting (keep it, e.g. Chrome); all-PIDs-gone means you
-                # actually closed it (drop it, so closed apps aren't resurrected
-                # and restored ones don't perpetuate forever).
+                # Authoritative pass. At logout/shutdown the apps are being torn
+                # down, so a fresh scan here is unreliable -- a heavy app like a
+                # browser can fully exit before this runs and be missed. The
+                # periodic timer, by contrast, captured the true live set every
+                # couple of minutes while everything was alive. So we UNION:
+                # keep every app from that recent live save, and add anything new
+                # this scan happens to see. This guarantees an app that was open
+                # is never dropped just because it died first during shutdown.
+                # (The periodic save rewrites the live set every cycle, so this
+                # can't accumulate stale apps; at most an app you closed in the
+                # last ~2 min before shutting down reopens once.)
                 seen = {a.get('path') for a in apps_to_save}
                 kept = 0
                 for a in old_apps:
                     p = a.get('path')
                     if not p or p in seen:
                         continue
-                    if any(os.path.exists(f"/proc/{pid}") for pid in a.get('pids', [])):
-                        apps_to_save.append(a)
-                        seen.add(p)
-                        kept += 1
+                    apps_to_save.append(a)
+                    seen.add(p)
+                    kept += 1
                 if kept:
-                    print(f"Kept {kept} app(s) still quitting that this scan didn't catch.")
+                    print(f"Kept {kept} app(s) from the recent live save that the shutdown scan missed.")
                 if not terminal_sessions and old_terms:
                     terminal_sessions = old_terms
                     print("Current scan found no terminals; kept terminals from the previous save.")
