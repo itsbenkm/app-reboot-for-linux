@@ -13,6 +13,8 @@
 # Project folder, baked in at install time. This is where App-Reboot keeps its
 # state (reboot.json) and the optional `config` file written below.
 APP_REBOOT_DIR="<REPO_DIR_PLACEHOLDER>"
+# Fixed install location of the scripts (independent of the project folder).
+APP_REBOOT_BIN="$HOME/.local/bin/app-reboot"
 
 # app-reboot-cpu-limit [percent]
 #   No argument  -> show the current CPU-settle threshold.
@@ -51,4 +53,58 @@ app-reboot-cpu-limit() {
 
     printf 'CPU_THRESHOLD=%s\n' "$1" > "$config"
     echo "CPU-settle threshold set to ${1}%. Takes effect on your next login."
+}
+
+# Save your current session right now (same as what runs automatically).
+app-reboot-save() {
+    "$APP_REBOOT_BIN/saver.py"
+}
+
+# Re-open the saved session right now. Normally happens automatically at login;
+# running it mid-session will re-launch the saved apps (may duplicate ones you
+# already have open).
+app-reboot-restore() {
+    "$APP_REBOOT_BIN/restorer.py"
+}
+
+# List what's currently saved for the next boot.
+app-reboot-saved() {
+    local f="$APP_REBOOT_DIR/reboot.json"
+    if [ ! -f "$f" ]; then
+        echo "No saved session yet ($f)."
+        return 1
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$f" <<'PY'
+import json, os, sys
+d = json.load(open(sys.argv[1]))
+apps = d.get("apps", []); terms = d.get("gnome_terminal_sessions", [])
+print(f"Saved session: {len(apps)} app(s), {len(terms)} terminal(s)")
+for a in apps:
+    print("  -", os.path.basename(a.get("path", "?")))
+for t in terms:
+    cwd = t.get("cwd") if isinstance(t, dict) else t
+    cmds = t.get("running_commands", []) if isinstance(t, dict) else []
+    print("  - terminal:", cwd, ("(" + ", ".join(cmds) + ")") if cmds else "")
+PY
+    else
+        cat "$f"
+    fi
+}
+
+# Show the available App-Reboot commands.
+app-reboot-help() {
+    cat <<'HELP'
+App-Reboot commands:
+  app-reboot-help              Show this help.
+  app-reboot-cpu-limit [n]     Show, or set (10-100), the CPU-settle threshold
+                               used while restoring apps. Takes effect next login.
+  app-reboot-save              Save your current session right now.
+  app-reboot-restore           Re-open the saved session right now.
+  app-reboot-saved             List what's currently saved for next boot.
+
+App-Reboot otherwise runs automatically: it saves your open apps and terminals
+on logout (and every couple of minutes as a safety net), and restores them when
+you log back in.
+HELP
 }

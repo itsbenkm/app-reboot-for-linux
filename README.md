@@ -43,29 +43,24 @@ Your saved `gnome-terminal` sessions are restored **first**, as **tabs in a sing
 
 Once installed, you don't need to do anything manually. It happens automatically!
 
-However, you can run these tools manually from any terminal if you want:
+However, a few commands are available (in any new terminal after install — they're small functions sourced from your `~/.bashrc`). Run **`app-reboot-help`** to see them all:
 
-- **Manually save the session right now:**
-  ```bash
-  ~/.local/bin/app-reboot/saver.py
-  ```
-- **Manually trigger the restoration right now:**
-  ```bash
-  ~/.local/bin/app-reboot/restorer.py
-  ```
-- **View currently saved state:**
-  To see exactly what has been saved for your next boot (both apps and terminal sessions), read the JSON file in this project folder:
-  ```bash
-  cat reboot.json
-  ```
-  *(Or open that file in any text editor).*
-- **Tune how aggressively apps relaunch:**
-  The restorer waits for your CPU to settle below a threshold (default **60%**) before launching each app, to avoid a "login storm". Adjust it any time:
+```
+app-reboot-help              Show the available commands.
+app-reboot-cpu-limit [n]     Show, or set (10-100), the CPU-settle threshold.
+app-reboot-save              Save your current session right now.
+app-reboot-restore           Re-open the saved session right now.
+app-reboot-saved             List what's currently saved for next boot.
+```
+
+- **Tune how aggressively apps relaunch** — `app-reboot-cpu-limit`:
+  The restorer waits for your CPU to settle below a threshold (default **60%**) before launching each app, to avoid a "login storm".
   ```bash
   app-reboot-cpu-limit 70     # set the threshold to 70% (integer 10-100)
   app-reboot-cpu-limit        # show the current value
   ```
-  Lower = gentler on login (waits for a calmer system); higher = relaunches faster. Takes effect on your next login. (The command is available in new terminals after install; like wallpaper-rotator's `wallpaper-duration`, it's a small function sourced from your `~/.bashrc`.)
+  Lower = gentler on login (waits for a calmer system); higher = relaunches faster. Takes effect on your next login. (Like wallpaper-rotator's `wallpaper-duration`.)
+- **View what's saved** — `app-reboot-saved` (or `cat reboot.json` in the project folder).
 
 ## Note on Browser Tabs
 App-Reboot will launch your web browser (Chrome, Firefox, etc.), but restoring the actual *tabs* depends on your browser settings. To ensure your tabs come back:
@@ -106,6 +101,7 @@ This will safely remove the Autostart entries, systemd services, and background 
 ## Changelog
 
 **Latest Updates:**
+- **Command set + `app-reboot-help`:** Added an `app-reboot-help` command that lists the available commands, plus convenience wrappers `app-reboot-save`, `app-reboot-restore`, and `app-reboot-saved` (alongside `app-reboot-cpu-limit`) — sourced from `~/.bashrc`, mirroring wallpaper-rotator's command set.
 - **Configurable restore speed:** The CPU-settle threshold is now adjustable with the `app-reboot-cpu-limit <10-100>` command (no argument shows the current value) — mirroring wallpaper-rotator's `wallpaper-duration`. It's stored in a local `config` file in the project folder and read fresh at each login, so changes take effect on the next boot with no restart.
 - **Don't drop apps that die first at shutdown:** Heavy apps (e.g. Google Chrome) can fully exit *before* the shutdown save scans, so a teardown-time scan misses them. The shutdown save now keeps every app from the most recent live (periodic) snapshot in addition to what it scans, so an app that was open is never lost just because it shut down quickly. The periodic timer keeps that snapshot fresh, so closed apps still fall off (at most one you closed in the last ~2 minutes before shutdown may reopen once). Also raised the restore CPU-settle threshold from 40% to 60% so apps relaunch faster on capable machines.
 - **Fewer wrong restores, no more lost apps:** The shutdown save now records each app's process IDs, letting it tell an app that's still *quitting* (a process is still alive) from one you actually *closed* (all processes gone). This stops apps you closed — or that app-reboot itself reopened — from being resurrected forever, while making sure an app still shutting down (e.g. Google Chrome, whose helper processes exit first and leave only an unmatchable main process) is no longer dropped from the save. *Note:* the document viewer is relaunched, but the specific open file can't be restored — GNOME passes it to the viewer over D-Bus, not on the command line, so the path isn't visible to app-reboot.
