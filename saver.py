@@ -197,7 +197,7 @@ def get_running_gui_apps(app_map):
                             name = name.rsplit('-', 1)[0]
                         # Unescape systemd hex codes
                         name = name.replace(r'\x2d', '-')
-                        
+
                         # Try matching the exact name
                         if name in app_map and not is_ignored(name):
                             match_key = name
@@ -211,10 +211,10 @@ def get_running_gui_apps(app_map):
             if not match_key:
                 exe_path = os.readlink(os.path.join(proc_dir, 'exe'))
                 basename = os.path.basename(exe_path)
-                
+
                 with open(os.path.join(proc_dir, 'cmdline'), 'rb') as f:
                     cmdline = f.read().split(b'\x00')
-                
+
                 cmd_basename = None
                 if cmdline and cmdline[0]:
                     cmd_basename = os.path.basename(cmdline[0].decode('utf-8', errors='ignore'))
@@ -223,26 +223,30 @@ def get_running_gui_apps(app_map):
                     match_key = basename
                 elif cmd_basename in app_map and not is_ignored(cmd_basename):
                     match_key = cmd_basename
-                
+
             # If we successfully mapped the process to a desktop file
             if match_key:
                 desktop_file = app_map[match_key]
-                
+
                 # Get memory usage from /proc/<pid>/statm
                 with open(os.path.join(proc_dir, 'statm'), 'r') as f:
                     rss_pages = int(f.read().split()[1])
                     mem = rss_pages * page_size
-                
-                # Aggregate memory if multiple processes share the same desktop file
+
+                # Aggregate memory and record the PIDs that make up this app, so
+                # a later shutdown pass can tell an app that's still quitting
+                # (some PID still alive) from one you actually closed (all PIDs
+                # gone). The PIDs are session-scoped; the restorer ignores them.
                 if desktop_file not in running_apps:
-                    running_apps[desktop_file] = {'mem': mem, 'path': desktop_file}
+                    running_apps[desktop_file] = {'mem': mem, 'path': desktop_file, 'pids': [int(pid)]}
                 else:
                     running_apps[desktop_file]['mem'] += mem
-                    
+                    running_apps[desktop_file]['pids'].append(int(pid))
+
         except (OSError, IOError, ValueError):
             # Ignore processes that die while we are inspecting them
             pass
-            
+
     return list(running_apps.values())
 
 def setup_logging(repo_dir):
@@ -340,11 +344,27 @@ def main():
                     return
                 print("Late backup pass: no prior save found; capturing best-effort state.")
             else:
-                # Authoritative pass: keep the live scan; only restore from the
-                # previous save if this scan came back empty (ran too late).
-                if not apps_to_save and old_apps:
-                    apps_to_save = old_apps
-                    print("Current scan found no apps; kept apps from the previous save.")
+                # Authoritative pass. A scan taken as the session tears down can
+                # MISS an app that's still quitting -- e.g. a browser whose
+                # helper processes have exited, leaving only a main process this
+                # heuristic can't name-match. So for any app in the previous
+                # (periodic) save that this scan didn't see, keep it ONLY if one
+                # of its recorded PIDs is still alive: still-alive means it's
+                # still quitting (keep it, e.g. Chrome); all-PIDs-gone means you
+                # actually closed it (drop it, so closed apps aren't resurrected
+                # and restored ones don't perpetuate forever).
+                seen = {a.get('path') for a in apps_to_save}
+                kept = 0
+                for a in old_apps:
+                    p = a.get('path')
+                    if not p or p in seen:
+                        continue
+                    if any(os.path.exists(f"/proc/{pid}") for pid in a.get('pids', [])):
+                        apps_to_save.append(a)
+                        seen.add(p)
+                        kept += 1
+                if kept:
+                    print(f"Kept {kept} app(s) still quitting that this scan didn't catch.")
                 if not terminal_sessions and old_terms:
                     terminal_sessions = old_terms
                     print("Current scan found no terminals; kept terminals from the previous save.")
