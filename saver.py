@@ -381,7 +381,13 @@ def main():
     for app in apps_to_save:
         print(f" - {os.path.basename(app['path'])} ({(app['mem'] / 1024 / 1024):.1f} MB)")
     for term in terminal_sessions:
-        print(f" - Terminal at: {term.get('cwd') if isinstance(term, dict) else term}")
+        if isinstance(term, dict):
+            cwd = term.get('cwd')
+            cmds = term.get('running_commands', [])
+            running = f"(running: {', '.join(cmds)})" if cmds else "(no process running)"
+            print(f" - Terminal at: {cwd}  {running}")
+        else:
+            print(f" - Terminal at: {term}")
 
 if __name__ == "__main__":
     main()
