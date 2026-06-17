@@ -47,19 +47,23 @@ However, a few commands are available (in any new terminal after install — the
 
 ```
 app-reboot-help              Show the available commands.
-app-reboot-cpu-limit [n]     Show, or set (10-100), the CPU-settle threshold.
+app-reboot-cpu-limit [n]     Show/set (10-100) the CPU % to wait below per app.
+app-reboot-app-wait [secs]   Show/set (0-120) the max wait for that settle.
+app-reboot-pause [secs]      Show/set (0-30) the pause after launching each app.
 app-reboot-save              Save your current session right now.
 app-reboot-restore           Re-open the saved session right now.
 app-reboot-saved             List what's currently saved for next boot.
 ```
 
-- **Tune how aggressively apps relaunch** — `app-reboot-cpu-limit`:
-  The restorer waits for your CPU to settle below a threshold (default **60%**) before launching each app, to avoid a "login storm".
+- **Tune the restore speed** — three knobs (all take effect on your next login):
+  When restoring, the tool launches apps one at a time and, after each, waits for the CPU to settle below `cpu-limit` (default **60%**) before the next — but no longer than `app-wait` (default **15s**), so a heavy app like a browser can't stall the whole restore while it loads. `pause` (default **3s**) is the gap after each launch.
   ```bash
-  app-reboot-cpu-limit 70     # set the threshold to 70% (integer 10-100)
-  app-reboot-cpu-limit        # show the current value
+  app-reboot-cpu-limit 70     # wait below 70% CPU (10-100)
+  app-reboot-app-wait 10      # ...but at most 10s per app (0-120) — lower = faster
+  app-reboot-pause 2          # 2s pause after each launch (0-30)
+  app-reboot-cpu-limit        # any command with no argument shows the current value
   ```
-  Lower = gentler on login (waits for a calmer system); higher = relaunches faster. Takes effect on your next login. (Like wallpaper-rotator's `wallpaper-duration`.)
+  Higher `cpu-limit` / lower `app-wait` = a faster, more aggressive restore; lower `cpu-limit` / higher `app-wait` = gentler on login. (Like wallpaper-rotator's `wallpaper-duration`.)
 - **View what's saved** — `app-reboot-saved` (or `cat reboot.json` in the project folder).
 
 ## Note on Browser Tabs
@@ -101,6 +105,7 @@ This will safely remove the Autostart entries, systemd services, and background 
 ## Changelog
 
 **Latest Updates:**
+- **Faster, tunable restore:** The per-app CPU-settle wait is now *capped* (default 15s) so a heavy app (e.g. Chrome) loading can't stall the whole restore for 30-45s, and the post-launch pause dropped from 5s to a configurable 3s. Two new commands join `app-reboot-cpu-limit`: `app-reboot-app-wait` (the cap) and `app-reboot-pause` — all shown in `app-reboot-help`.
 - **Fixed a boot-time save wipe (empty *and* partial):** The periodic safety-net save could fire during boot — before or partway through the restore — and overwrite the saved session with an empty or partial scan, so little or nothing came back. Three guards now prevent this: the saver refuses to overwrite a non-empty session with an empty scan; the restorer holds a lock so the periodic save **skips entirely while a restore is in progress** (preventing partial overwrites); and the first post-boot periodic save is delayed (2→5 min).
 - **Command set + `app-reboot-help`:** Added an `app-reboot-help` command that lists the available commands, plus convenience wrappers `app-reboot-save`, `app-reboot-restore`, and `app-reboot-saved` (alongside `app-reboot-cpu-limit`) — sourced from `~/.bashrc`, mirroring wallpaper-rotator's command set.
 - **Configurable restore speed:** The CPU-settle threshold is now adjustable with the `app-reboot-cpu-limit <10-100>` command (no argument shows the current value) — mirroring wallpaper-rotator's `wallpaper-duration`. It's stored in a local `config` file in the project folder and read fresh at each login, so changes take effect on the next boot with no restart.

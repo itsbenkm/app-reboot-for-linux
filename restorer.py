@@ -107,19 +107,20 @@ def setup_logging(repo_dir):
     sys.stderr = sys.stdout
     print(f"\n--- App-Reboot Restorer Run: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
 
-def read_cpu_threshold(repo_dir, default=60.0):
+def read_config_num(repo_dir, key, default, lo, hi):
     """
-    Read the CPU-settle threshold (percent) from the optional `config` file in
-    the project folder -- set via the `app-reboot-cpu-limit` command. Returns
-    `default` if the file is missing or the value is outside the sane 10-100
-    range, so a bad/edited value can never wedge the restore.
+    Read a numeric setting (KEY=value) from the optional `config` file in the
+    project folder -- set via the app-reboot-* commands. Returns `default` if
+    the file/key is missing or the value is outside [lo, hi], so a bad or
+    hand-edited value can never wedge the restore.
     """
     try:
         with open(os.path.join(repo_dir, "config"), "r", encoding="utf-8") as f:
             for line in f:
-                if line.strip().startswith("CPU_THRESHOLD="):
+                line = line.strip()
+                if line.startswith(key + "="):
                     val = float(line.split("=", 1)[1].strip())
-                    if 10.0 <= val <= 100.0:
+                    if lo <= val <= hi:
                         return val
     except Exception:
         pass
@@ -142,9 +143,14 @@ def main():
     # Setup logging
     setup_logging(REPO_DIR)
 
-    # CPU-settle threshold (percent), configurable via `app-reboot-cpu-limit`.
-    cpu_threshold = read_cpu_threshold(REPO_DIR)
-    print(f"Using CPU-settle threshold: {cpu_threshold:.0f}%")
+    # Restore tunables, all configurable via the app-reboot-* commands:
+    #   CPU_THRESHOLD - launch the next app once CPU is below this percent
+    #   APP_WAIT      - max seconds to wait for that settle (caps slow heavy apps)
+    #   PAUSE         - baseline pause after launching each app
+    cpu_threshold = read_config_num(REPO_DIR, "CPU_THRESHOLD", 60.0, 10.0, 100.0)
+    app_wait = read_config_num(REPO_DIR, "APP_WAIT", 15.0, 0.0, 120.0)
+    pause = read_config_num(REPO_DIR, "PAUSE", 3.0, 0.0, 30.0)
+    print(f"Restore settings: CPU<{cpu_threshold:.0f}%, per-app wait cap {app_wait:.0f}s, pause {pause:.0f}s")
 
     session_file = os.path.join(REPO_DIR, "reboot.json")
     
@@ -189,12 +195,12 @@ def main():
         pass
 
     print("Waiting for system load to stabilize before restoring apps...")
-    # Initial wait to let auto.updates or other heavy startup tasks begin
-    time.sleep(5.0)
-    
-    # Wait up to 2 minutes (60 retries * 2 sec) for the CPU to drop below 60%
-    wait_retries = 0
-    while wait_retries < 60:
+    # Initial pause to let auto.updates or other heavy startup tasks begin.
+    time.sleep(pause)
+
+    # Wait (capped at app_wait seconds) for the CPU to drop below the threshold.
+    deadline = time.monotonic() + app_wait
+    while time.monotonic() < deadline:
         cpu_usage = get_cpu_usage()
         print(f"Current startup CPU usage: {cpu_usage:.1f}%")
         if cpu_usage < cpu_threshold:
@@ -202,11 +208,10 @@ def main():
             break
         print("System busy, waiting for it to settle...")
         time.sleep(2.0)
-        wait_retries += 1
     else:
-        # Loop exhausted without the CPU settling -- proceed regardless so a
+        # Cap reached without the CPU settling -- proceed anyway so a
         # persistently busy login can't block the restore indefinitely.
-        print(f"CPU did not settle below {cpu_threshold:.0f}% within the wait budget; proceeding anyway.")
+        print(f"CPU did not settle below {cpu_threshold:.0f}% within {app_wait:.0f}s; proceeding anyway.")
 
     # Restore terminal sessions first, gathered as TABS in a single window.
     #
@@ -316,29 +321,26 @@ def main():
             print(f"Failed to launch {app_path}: {e}")
             continue
 
-        # Initial baseline wait to allow the app to begin loading
-        time.sleep(5.0)
-        
-        # Stability check: Wait until CPU usage drops below 60%
-        # We retry a maximum of 60 times (total ~120 extra seconds) to prevent infinite hanging
-        retries = 0
-        max_retries = 60  
-        
-        while retries < max_retries:
+        # Brief baseline pause to let the app begin loading.
+        time.sleep(pause)
+
+        # Wait for the CPU to settle, capped at app_wait seconds so one heavy
+        # app can't stall the whole restore while it finishes loading.
+        deadline = time.monotonic() + app_wait
+        while time.monotonic() < deadline:
             cpu_usage = get_cpu_usage()
             print(f"Current CPU usage: {cpu_usage:.1f}%")
-            
+
             if cpu_usage < cpu_threshold:  # Threshold for "stable"
                 print("System stable. Proceeding to next app.")
                 break
-                
+
             print("System busy, waiting for it to settle...")
             time.sleep(2.0)
-            retries += 1
         else:
-            # Loop exhausted without settling -- launch the next app anyway
+            # Cap reached without settling -- launch the next app anyway
             # rather than stalling the whole restore on one busy moment.
-            print(f"CPU did not settle below {cpu_threshold:.0f}% within the wait budget; launching next app anyway.")
+            print(f"CPU did not settle below {cpu_threshold:.0f}% within {app_wait:.0f}s; launching next app anyway.")
 
     print("All applications restored!")
 
