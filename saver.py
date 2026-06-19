@@ -50,8 +50,26 @@ def parse_desktop_files(files):
     """
     Parses a list of .desktop files to create a mapping.
     Maps both the base filename and the Exec binary to the full path of the .desktop file.
+
+    NoDisplay=true files are NOT restored on their own -- NoDisplay is how
+    background daemons and helper launchers (evolution-alarm-notify,
+    snap-handle-link, ...) mark themselves, and we don't want to resurrect
+    those. BUT a NoDisplay file is still used as an *alias* when it launches the
+    same executable as a visible file. This matters because some apps ship their
+    canonical desktop file with NoDisplay=true next to a visible one -- e.g.
+    Google Chrome ships com.google.Chrome.desktop (NoDisplay) alongside the
+    visible google-chrome.desktop, both launching google-chrome-stable -- and
+    the running browser process advertises the canonical "com.google.Chrome" id
+    in its systemd cgroup scope. Mapping that alias to the visible file is what
+    lets Chrome be detected reliably instead of only by accident via its helper
+    processes (the cause of it intermittently not being saved). A NoDisplay file
+    with no visible same-exec twin contributes nothing, preserving the old
+    "don't restore daemons" behaviour.
+
+    Returns app_map: a dict mapping each base filename / Exec basename to the
+    full path of the .desktop file to launch.
     """
-    app_map = {}
+    parsed = []
     for f in files:
         try:
             with open(f, 'r', encoding='utf-8', errors='ignore') as file:
@@ -59,7 +77,7 @@ def parse_desktop_files(files):
                 exec_cmd = None
                 is_app = False
                 no_display = False
-                
+
                 # Read properties line by line
                 for line in file:
                     line = line.strip()
@@ -77,15 +95,45 @@ def parse_desktop_files(files):
                     elif line.startswith("NoDisplay="):
                         if line.split("=", 1)[1].lower() == "true":
                             no_display = True
-                            
-                # Only include standard visible applications
-                if name and is_app and not no_display:
+
+                if name and is_app:
+                    visible = not no_display
                     base = os.path.basename(f).replace('.desktop', '')
-                    app_map[base] = f
-                    if exec_cmd:
-                        app_map[exec_cmd] = f
+                    parsed.append((f, base, exec_cmd, visible))
         except Exception:
             pass
+
+    # Pass 1: visible (menu-shown) files. This reproduces the original mapping
+    # exactly -- base filename and Exec basename both point to the file, later
+    # files overwriting earlier ones on a key collision -- so existing matching
+    # behaviour is unchanged. Also record, per Exec basename, the visible file
+    # that launches it, for aliasing NoDisplay files below.
+    app_map = {}
+    visible_exec_to_file = {}
+    for f, base, exec_cmd, visible in parsed:
+        if not visible:
+            continue
+        app_map[base] = f
+        if exec_cmd:
+            app_map[exec_cmd] = f
+            visible_exec_to_file[exec_cmd] = f
+
+    # Pass 2: NoDisplay files. NoDisplay marks daemons/helpers we don't want to
+    # restore on their own, so a NoDisplay file only counts when it launches the
+    # SAME executable as some visible file -- then it's just an alternate id for
+    # that app. The case this exists for: Google Chrome ships the canonical
+    # com.google.Chrome.desktop with NoDisplay=true next to the visible
+    # google-chrome.desktop (both run google-chrome-stable), and the running
+    # browser advertises "com.google.Chrome" in its cgroup scope. We register
+    # that id -> the visible file, but ONLY for keys not already mapped, so a
+    # NoDisplay alias can never shadow a real visible app. A NoDisplay file with
+    # no visible same-exec twin contributes nothing (old behaviour preserved).
+    for f, base, exec_cmd, visible in parsed:
+        if visible or exec_cmd not in visible_exec_to_file:
+            continue
+        target = visible_exec_to_file[exec_cmd]
+        if base not in app_map:
+            app_map[base] = target
     return app_map
 
 def get_gnome_terminal_sessions():
@@ -328,7 +376,7 @@ def main():
     # 1. Parse all available applications
     files = get_desktop_files()
     app_map = parse_desktop_files(files)
-    
+
     # 2. Match them against running processes
     apps_to_save = get_running_gui_apps(app_map)
     terminal_sessions = get_gnome_terminal_sessions()
